@@ -1,7 +1,8 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
+#![allow(unused)]
+
+extern crate proc_macro;
+
+#[proc_macro]
+pub fn rcstruct(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    input
 }
