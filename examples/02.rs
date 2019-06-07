@@ -30,13 +30,18 @@ fn unbounded_channel<T>() -> (Sender<T>, Receiver<T>) {
 }
 
 rcstruct::rcstruct! {
-    struct GUIInternal {
+    pub struct GUI {
         running: bool,
         event_recv: Receiver<Event>,
         action_send: Sender<Action>,
     }
 
-    impl GUIInternal {
+    impl {
+        pub new(event_recv: Receiver<Event>, action_send: Sender<Action>) -> Rt<Self> {
+            let running = true;
+            { running, event_recv, action_send, }
+        }
+
         fn send_action(&self, action: Action) -> Rt {
             Ok(self.action_send.send(action)?)
         }
@@ -53,31 +58,6 @@ rcstruct::rcstruct! {
         fn events(&self) -> Rt<impl IntoIterator<Item = Event>> {
             let events = Vec::new();
             Ok(events)
-        }
-    }
-
-    pub struct GUI(Rc<RefCell<GUIInternal>>);
-
-    impl GUI {
-        pub fn new(event_recv: Receiver<Event>, action_send: Sender<Action>) -> Rt<Self> {
-            let running = true;
-            Ok(GUI(Rc::new(RefCell::new(GUIInternal { running, event_recv, action_send, }))))
-        }
-
-        pub fn send_action(&self, action: Action) -> Rt {
-            self.0.borrow().send_action(action)
-        }
-
-        pub fn running(&self) -> Rt<bool> {
-            self.0.borrow().running()
-        }
-
-        pub fn quit(&self) -> Rt {
-            self.0.borrow_mut().quit()
-        }
-
-        pub fn events(&self) -> Rt<impl IntoIterator<Item = Event>> {
-            self.0.borrow().events()
         }
     }
 }
