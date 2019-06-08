@@ -16,7 +16,7 @@ impl Parse for Method {
         let visibility = input.parse()?;
         let _: syn::Token![fn] = input.parse()?;
         let name: syn::Ident = input.parse()?;
-        let generics = input.parse()?;
+        let mut generics: syn::Generics = input.parse()?;
         let args_input;
         let _ = syn::parenthesized!(args_input in input);
         let borrow = syn::Ident::new(match args_input.parse()? {
@@ -47,6 +47,7 @@ impl Parse for Method {
             .collect::<ParseResult<Vec<_>>>()?;
         let _: syn::Token![->] = input.parse()?;
         let return_ty = input.parse()?;
+        generics.where_clause = input.parse()?;
         let _: syn::Block = input.parse()?; // can be found in RcStruct.impl_items
 
         Ok(Method {
@@ -74,8 +75,10 @@ impl quote::ToTokens for Method {
             ..
         } = self;
 
+        let where_clause = &generics.where_clause;
+
         let result = quote::quote! {
-            #visibility fn #name #generics(&self, #tail_args) -> #return_ty {
+            #visibility fn #name #generics(&self, #tail_args) -> #return_ty #where_clause {
                 //   v-v-- need to be apart to avoid "unexpected token"
                 self.0 .#borrow().#name(#(#tail_args_names)*)
             }

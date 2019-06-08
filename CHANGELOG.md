@@ -1,10 +1,18 @@
 # Unreleased
 
+-   Add where clause support.
+
+    See [`examples/02.rs`](./examples/02.rs) for the full example.
+
+    ```rust
+    pub fn window<T>(&self, data: T) -> WindowBuilder<T> where T: Clone {
+        WindowBuilder { data }
+    }
+    ```
+
 # 0.1.3 - 2019-06-08
 
 -   Implement access to the outer structure.
-
-    See [`examples/02.rs`](./examples/02.rs) for the full example.
 
     ```rust
     rcstruct::rcstruct! {
