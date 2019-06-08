@@ -24,7 +24,7 @@ impl Parse for Method {
                 Some(_) => "borrow_mut",
                 None => "borrow",
             }
-            _ => return Err(args_input.error("bad")),
+            _ => return Err(args_input.error("expected `&self` or `&mut self`")),
         }, name.span());
         if !args_input.is_empty() {
             let _: syn::Token![,] = args_input.parse()?;
