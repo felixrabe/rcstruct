@@ -75,7 +75,11 @@ impl Parse for RcStruct {
             let mut vec = Vec::with_capacity(4);
             let impl_body_input = impl_body_input.fork();
             while !impl_body_input.is_empty() {
-                vec.push(impl_body_input.parse()?);
+                let mut impl_item: syn::ImplItemMethod = impl_body_input.parse()?;
+                impl_item.block.stmts.insert(0, syn::parse((quote::quote! {
+                    let outer = || self.rcstruct_outer.upgrade().map(|outer| #name(outer));
+                }).into())?);
+                vec.push(impl_item);
             }
             vec
         };

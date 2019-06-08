@@ -1,3 +1,5 @@
+#![recursion_limit="128"]
+
 extern crate proc_macro;
 
 mod parse_rcstruct;
@@ -30,6 +32,7 @@ pub fn rcstruct(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let output = quote::quote_spanned! { span=>
         struct #inner_name {
+            rcstruct_outer: std::rc::Weak<std::cell::RefCell<#inner_name>>,
             #fields
         }
 
@@ -43,9 +46,12 @@ pub fn rcstruct(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         impl #name {
             #new_visibility fn new(#new_args) -> #new_result_ty {
                 #(#new_stmts)*
-                Ok(#name(std::rc::Rc::new(std::cell::RefCell::new(#inner_name {
+                let rcstruct_rc = std::rc::Rc::new(std::cell::RefCell::new(#inner_name {
+                    rcstruct_outer: std::rc::Weak::new(),
                     #new_init
-                }))))
+                }));
+                rcstruct_rc.borrow_mut().rcstruct_outer = std::rc::Rc::downgrade(&rcstruct_rc);
+                Ok(#name(rcstruct_rc))
             }
 
             #(#methods)*

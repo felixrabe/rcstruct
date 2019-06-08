@@ -3,6 +3,7 @@
 type Rt<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 pub struct WindowBuilder<T> {
+    gui: GUI,
     data: T,
 }
 
@@ -25,7 +26,8 @@ rcstruct::rcstruct! {
         }
 
         pub fn window<T>(&self, data: T) -> WindowBuilder<T> {
-            WindowBuilder { data }
+            let gui = outer().unwrap(); // <= `outer()` returns Option<GUI>
+            WindowBuilder { gui, data }
         }
     }
 }
