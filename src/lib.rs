@@ -1,5 +1,3 @@
-// #![allow(unused)]
-
 extern crate proc_macro;
 
 mod parse_rcstruct;

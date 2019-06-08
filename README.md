@@ -75,20 +75,20 @@ rcstruct::rcstruct! {
             { running, event_recv, action_send, }
         }
 
-        fn send_action(&self, action: Action) -> Rt {
+        pub fn send_action(&self, action: Action) -> Rt {
             Ok(self.action_send.send(action)?)
         }
 
-        fn running(&self) -> Rt<bool> {
+        pub fn running(&self) -> Rt<bool> {
             Ok(self.running)
         }
 
-        fn quit(&mut self) -> Rt {
+        pub fn quit(&mut self) -> Rt {
             self.running = false;
             Ok(())
         }
 
-        fn events(&self) -> Rt<impl IntoIterator<Item = Event>> {
+        pub fn events(&self) -> Rt<impl IntoIterator<Item = Event>> {
             let events = Vec::new();
             Ok(events)
         }
