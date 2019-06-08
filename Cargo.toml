@@ -1,6 +1,7 @@
 [package]
 name = "rcstruct"
-version = "0.1.0"
+version = "0.1.1"
+publish = false
 description = "Generate transparent `Struct(Rc<RefCell<Struct>>)` newtypes"
 authors = ["Felix Rabe <felix@rabe.io>"]
 edition = "2018"
