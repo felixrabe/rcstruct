@@ -2,7 +2,7 @@
 
 ## Example without rcstruct
 
-See [`examples/01.rs`](./examples/01.rs) for the full example.
+See [`examples/01a.rs`](./examples/01a.rs) for the full example.
 
 ```rust
 struct GUIInternal {
@@ -59,7 +59,7 @@ impl GUI {
 
 ## Example with rcstruct
 
-See [`examples/02.rs`](./examples/02.rs) for the full example.
+See [`examples/01b.rs`](./examples/01b.rs) for the full example.
 
 ```rust
 rcstruct::rcstruct! {
