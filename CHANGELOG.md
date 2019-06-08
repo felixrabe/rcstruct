@@ -1,4 +1,4 @@
-# Unreleased
+# 0.1.3 - 2019-06-08
 
 -   Implement access to the outer structure.
 
