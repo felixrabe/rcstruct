@@ -1,9 +1,8 @@
-use crate::NewArg;
-use crate::Method;
-
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
+use syn::spanned::Spanned;
+use syn::Token;
 
-const SUFFIX: &str = "RcStructWrapped";
+const WRAPPED_SUFFIX: &str = "RcStructWrapped";
 
 mod kw {
     syn::custom_keyword!(new);
@@ -11,46 +10,48 @@ mod kw {
 
 pub struct RcStruct {
     pub span: proc_macro2::Span,
-    pub visibility: syn::Visibility,
-    pub name: syn::Ident,
-    pub inner_name: syn::Ident,
-    pub fields: syn::punctuated::Punctuated<syn::Field, syn::Token![,]>,
-    pub new_visibility: syn::Visibility,
-    pub new_args: syn::punctuated::Punctuated<NewArg, syn::Token![,]>,
-    pub new_result_ty: syn::Type,
+    pub vis: syn::Visibility,
+    pub ident: syn::Ident,
+    pub inner_ident: syn::Ident,
+    pub fields_named: syn::punctuated::Punctuated<syn::Field, Token![,]>,
+
+    pub new_vis: syn::Visibility,
+    pub new_args: syn::punctuated::Punctuated<syn::FnArg, Token![,]>,
+    pub new_output: syn::ReturnType,
     pub new_stmts: Vec<syn::Stmt>,
     pub new_init: proc_macro2::TokenStream,
-    pub impl_items: Vec<syn::ImplItemMethod>,
-    pub methods: Vec<Method>,
+
+    pub impl_methods: Vec<syn::ImplItemMethod>,
+    pub wrap_methods: Vec<syn::ImplItemMethod>,
 }
 
 impl Parse for RcStruct {
     fn parse(input: ParseStream) -> ParseResult<Self> {
         // struct Name { .. }
-        let visibility = input.parse()?;
-        let _: syn::Token![struct] = input.parse()?;
-        let name: syn::Ident = input.parse()?;
-        let span = name.span();
-        let inner_name = syn::Ident::new(&format!("{}{}", name, SUFFIX), name.span());
-        let fields;
-        let _ = syn::braced!(fields in input);
-        let fields = fields.parse_terminated(syn::Field::parse_named)?;
+        let vis = input.parse()?;
+        let _: Token![struct] = input.parse()?;
+        let ident: syn::Ident = input.parse()?;
+        let span = ident.span();
+        let inner_ident = syn::Ident::new(&format!("{}{}", ident, WRAPPED_SUFFIX), ident.span());
+        let fields_named = input.parse::<syn::FieldsNamed>()?.named;
 
         // impl { .. }
-        let _: syn::Token![impl] = input.parse()?;
-        let impl_body_input;
-        let _ = syn::braced!(impl_body_input in input);
+        let _: Token![impl] = input.parse()?;
+        let impl_input;
+        let _: syn::token::Brace = syn::braced!(impl_input in input);
 
         // new(..) { .. }
-        let new_visibility = impl_body_input.parse()?;
-        let _: kw::new = impl_body_input.parse()?;
+        let new_vis = impl_input.parse()?;
+        let _: kw::new = impl_input.parse()?;
         let new_args_input;
-        let _ = syn::parenthesized!(new_args_input in impl_body_input);
-        let new_args = new_args_input.parse_terminated(NewArg::parse)?;
-        let _: syn::Token![->] = impl_body_input.parse()?;
-        let new_result_ty = impl_body_input.parse()?;
+        let _ = syn::parenthesized!(new_args_input in impl_input);
+        let new_args = new_args_input.parse_terminated(syn::FnArg::parse)?;
+        let new_output = match impl_input.parse()? {
+            syn::ReturnType::Default => return Err(impl_input.error("expected `-> Result<Self>`")),
+            r => r,
+        };
         let new_body_input;
-        let _ = syn::braced!(new_body_input in impl_body_input);
+        let _ = syn::braced!(new_body_input in impl_input);
         let mut new_stmts = Vec::with_capacity(4);
         let new_init;
         loop {
@@ -71,41 +72,70 @@ impl Parse for RcStruct {
         }
 
         // fn .. { .. }
-        let impl_items = {
-            let mut vec = Vec::with_capacity(4);
-            let impl_body_input = impl_body_input.fork();
-            while !impl_body_input.is_empty() {
-                let mut impl_item: syn::ImplItemMethod = impl_body_input.parse()?;
-                impl_item.block.stmts.insert(0, syn::parse((quote::quote! {
-                    let outer = || self.rcstruct_outer.upgrade().map(|outer| #name(outer));
-                }).into())?);
-                vec.push(impl_item);
-            }
-            vec
-        };
-        let methods = {
-            let mut vec = Vec::with_capacity(4);
-            while !impl_body_input.is_empty() {
-                vec.push(impl_body_input.parse()?);
-            }
-            vec
-        };
+        let mut impl_methods: Vec<syn::ImplItemMethod> = Vec::with_capacity(4);
+        while !impl_input.is_empty() {
+            let mut impl_method: syn::ImplItemMethod = impl_input.parse()?;
+            impl_method.block.stmts.insert(0, syn::parse2(quote::quote! {
+                let outer = || self.rcstruct_outer.upgrade().map(|outer| #ident(outer));
+            })?);
+            impl_methods.push(impl_method);
+        }
+        let mut wrap_methods: Vec<syn::ImplItemMethod> = Vec::with_capacity(4);
+        for syn::ImplItemMethod { vis, sig, .. } in impl_methods.iter() {
+            let syn::MethodSig { ident, decl: syn::FnDecl { generics, inputs, output, .. }, .. } = sig;
 
-        // let _: proc_macro2::TokenStream = input.parse()?;
+            let mut inputs = inputs.iter();
+            let first_arg = inputs.next().ok_or(syn::Error::new(sig.span(), "expected argument"))?;
+            let borrow = syn::Ident::new(match first_arg {
+                syn::FnArg::SelfRef(syn::ArgSelfRef { mutability, .. }) => {
+                    match mutability {
+                        Some(_) => "borrow_mut",
+                        None => "borrow",
+                    }
+                },
+                _ => return Err(syn::Error::new(first_arg.span(), "expected `&self` or `&mut self`"))
+            }, first_arg.span());
+
+            let inputs_args: Vec<_> = inputs.clone().collect();
+
+            let args: Vec<_> = inputs.map(|arg|
+                match arg {
+                    syn::FnArg::Captured(syn::ArgCaptured { pat, ..}) => match pat {
+                        syn::Pat::Ident(syn::PatIdent{ ident, .. }) => Some(ident),
+                        _ => None,
+                    }
+                    syn::FnArg::Inferred(_) => None, // TODO?
+                    syn::FnArg::Ignored(_) => None, // TODO?
+                    _ => None,
+                }.ok_or(syn::Error::new(arg.span(), "expected `arg: Ty`"))
+            )
+            .collect::<ParseResult<Vec<_>>>()?;
+
+            let where_clause = &generics.where_clause;
+
+            let wrap_method = syn::parse2(quote::quote_spanned! { span=>
+                // This self ref is never `&mut self` because of interior mutability:
+                #vis fn #ident #generics(&self, #(#inputs_args),*) #output #where_clause {
+                    //    v-- space to avoid "expected identifier or integer"
+                    self.0 .#borrow().#ident(#(#args),*)
+                }
+            })?;
+            wrap_methods.push(wrap_method);
+        }
 
         Ok(RcStruct {
             span,
-            visibility,
-            name,
-            inner_name,
-            fields,
-            new_visibility,
+            vis,
+            ident,
+            inner_ident,
+            fields_named,
+            new_vis,
             new_args,
-            new_result_ty,
+            new_output,
             new_stmts,
             new_init,
-            impl_items,
-            methods,
+            impl_methods,
+            wrap_methods,
         })
     }
 }

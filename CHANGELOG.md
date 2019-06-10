@@ -1,4 +1,14 @@
-# Unreleased
+# 0.2.0 - unreleased
+
+-   Rewrite for simplicity and to fix multiple args.
+
+    See [`examples/03.rs`](./examples/03.rs) for the full example.
+
+    ```rust
+    fn multiarg(&self, a: u32, b: u32, c: u32) -> u32 {
+        a + b * c
+    }
+    ```
 
 # 0.1.4 - 2019-06-09
 

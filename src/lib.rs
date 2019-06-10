@@ -3,60 +3,55 @@
 extern crate proc_macro;
 
 mod parse_rcstruct;
-mod parse_new_arg;
-mod parse_method;
 
 use self::parse_rcstruct::RcStruct;
-use self::parse_new_arg::NewArg;
-use self::parse_method::Method;
 
 #[proc_macro]
 pub fn rcstruct(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let RcStruct {
         span,
-        visibility,
-        name,
-        inner_name,
-        fields,
-        new_visibility,
+        vis,
+        ident,
+        inner_ident,
+        fields_named,
+
+        new_vis,
         new_args,
-        new_result_ty,
+        new_output,
         new_stmts,
         new_init,
-        impl_items,
-        methods,
-    } = {
-        let input = input.clone();
-        syn::parse_macro_input!(input as RcStruct)
-    };
+
+        impl_methods,
+        wrap_methods,
+    } = syn::parse_macro_input!(input);
 
     let output = quote::quote_spanned! { span=>
-        struct #inner_name {
-            rcstruct_outer: std::rc::Weak<std::cell::RefCell<#inner_name>>,
-            #fields
+        struct #inner_ident {
+            rcstruct_outer: std::rc::Weak<std::cell::RefCell<#inner_ident>>,
+            #fields_named
         }
 
-        impl #inner_name {
-            #(#impl_items)*
+        impl #inner_ident {
+            #(#impl_methods)*
         }
 
         #[derive(Clone)]
-        #visibility struct #name(std::rc::Rc<std::cell::RefCell<#inner_name>>);
+        #vis struct #ident(std::rc::Rc<std::cell::RefCell<#inner_ident>>);
 
-        impl #name {
-            #new_visibility fn new(#new_args) -> #new_result_ty {
+        impl #ident {
+            #new_vis fn new(#new_args) #new_output {
                 #(#new_stmts)*
-                let rcstruct_rc = std::rc::Rc::new(std::cell::RefCell::new(#inner_name {
+                let rcstruct_rc = std::rc::Rc::new(std::cell::RefCell::new(#inner_ident {
                     rcstruct_outer: std::rc::Weak::new(),
                     #new_init
                 }));
                 rcstruct_rc.borrow_mut().rcstruct_outer = std::rc::Rc::downgrade(&rcstruct_rc);
-                Ok(#name(rcstruct_rc))
+                Ok(#ident(rcstruct_rc))
             }
 
-            #(#methods)*
+            #(#wrap_methods)*
         }
     };
-
-    output.into()
+    let output = output.into();
+    output
 }
